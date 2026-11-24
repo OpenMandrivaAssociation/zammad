@@ -1,0 +1,60 @@
+Zammad is installed under /srv/www/zammad. The web server document root
+is public/. Configuration is /etc/zammad/zammad.env and
+/etc/zammad/database.yml. Attachments, cache and temporary files are
+under /var/lib/zammad. Logs are under /var/log/zammad.
+
+The package creates a local PostgreSQL database and starts Zammad.
+Puma listens on 127.0.0.1:3000 and the websocket server on
+127.0.0.1:6042. Neither is meant to be reached directly from other
+machines. Redis is a private instance, redis@zammad, on
+/run/redis/zammad/redis.sock.
+
+Database access uses the PostgreSQL socket as the OS user "zammad"
+(peer authentication, empty password, no host in database.yml). A
+freshly initialised OpenMandriva cluster does this. If local sockets
+on this host require a password, set it in /etc/zammad/database.yml
+and run:
+
+  systemctl restart zammad.service
+
+1. Enable a web server site. The package does not listen on port 80
+   by itself.
+
+   nginx:
+
+     ln -s ../sites-available/zammad.conf /etc/nginx/sites-enabled/zammad.conf
+     systemctl enable --now nginx
+     systemctl reload nginx
+
+   The server name is zammad.* (for example http://zammad.example.com/).
+   Point that name at this machine. It does not replace the default
+   nginx site.
+
+   Apache:
+
+     cp /etc/httpd/conf/vhosts.d/zammad.conf.disabled \
+        /etc/httpd/conf/vhosts.d/zammad.conf
+     edit ServerName in that file
+     systemctl enable --now httpd-prefork
+     systemctl reload httpd-prefork
+
+   The first Apache VirtualHost becomes the default server for port 80.
+   Set ServerName before reloading, or this vhost answers every name.
+   The packaged vhost grants access to every client. Puma itself stays
+   on 127.0.0.1.
+
+2. Open the site and finish the setup wizard (administrator, organisation,
+   email). The wizard is the initial login. There is no default password.
+
+Elasticsearch is optional. Zammad searches in PostgreSQL without it.
+Elasticsearch is not packaged in OpenMandriva.
+
+PGP email needs gnupg, which is recommended but not required.
+
+Commands:
+
+  zammad rake db:migrate
+  zammad run rails runner 'Locale.sync; Translation.sync'
+
+Removing the package stops the services and keeps the database and
+/var/lib/zammad.

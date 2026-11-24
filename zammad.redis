@@ -1,0 +1,12 @@
+# Redis instance for Zammad. The socket is mode 0666, same as the gitea
+# instance: only local users can reach it, and it does not listen on TCP.
+port 0
+unixsocket /run/redis/zammad/redis.sock
+unixsocketperm 0666
+save 900 1
+save 300 10
+save 60 10000
+appendonly yes
+appendfilename "zammad.aof"
+dir /srv/redis/zammad
+loglevel notice

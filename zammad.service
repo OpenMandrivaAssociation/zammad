@@ -1,0 +1,16 @@
+[Unit]
+Description=Zammad helpdesk
+After=network.target postgresql.service redis@zammad.service
+Wants=postgresql.service redis@zammad.service
+Wants=zammad-web.service zammad-worker.service zammad-websocket.service
+
+[Service]
+Type=simple
+User=zammad
+Group=zammad
+ExecStart=/usr/bin/sleep infinity
+Restart=on-failure
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

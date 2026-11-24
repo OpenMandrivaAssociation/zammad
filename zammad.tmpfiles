@@ -1,0 +1,8 @@
+d /var/lib/zammad 0750 zammad zammad -
+d /var/lib/zammad/storage 0750 zammad zammad -
+d /var/lib/zammad/tmp 0750 zammad zammad -
+d /var/lib/zammad/tmp/cache 0750 zammad zammad -
+d /var/lib/zammad/tmp/pids 0750 zammad zammad -
+d /var/lib/zammad/tmp/sockets 0750 zammad zammad -
+d /var/log/zammad 0750 zammad zammad -
+d /srv/redis/zammad 0755 redis redis -

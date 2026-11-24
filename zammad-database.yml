@@ -1,0 +1,11 @@
+# Local PostgreSQL via the Unix socket.
+# Peer authentication: the database role matches the OS user "zammad".
+# Leave the password empty and do not set "host" unless the server is remote.
+production:
+  adapter: postgresql
+  database: zammad_production
+  pool: 50
+  timeout: 5000
+  encoding: utf8
+  username: zammad
+  password:

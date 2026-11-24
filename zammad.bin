@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run a Zammad command with the packaged environment.
+# As root this re-executes as the zammad user, without a login shell.
+# "run" is accepted and ignored, so both forms work:
+#   zammad rake db:migrate
+#   zammad run rails runner 'Locale.sync'
+set -e
+if [ "$(id -u)" -eq 0 ]; then
+	exec /usr/bin/runuser -u zammad -- /usr/bin/zammad "$@"
+fi
+cd /srv/www/zammad || exit 1
+set -a
+. /etc/zammad/zammad.env
+set +a
+if [ "${1:-}" = "run" ]; then
+	shift
+fi
+exec /usr/bin/bundle exec "$@"

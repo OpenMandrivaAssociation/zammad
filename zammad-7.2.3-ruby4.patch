@@ -1,0 +1,38 @@
+--- a/Gemfile	2026-11-24 05:38:29.917229131 +0100
++++ b/Gemfile	2026-11-24 05:33:45.623294412 +0100
+@@ -3,7 +3,7 @@
+ source 'https://rubygems.org'
+ 
+ # core - base
+-ruby '3.4.12'
++ruby '>= 3.2.0'
+ gem 'rails', '~> 8.1.0'
+ gem 'rake'
+ 
+@@ -193,6 +193,7 @@
+ # Debugging and profiling
+ gem 'pry-rails'
+ gem 'pry-remote'
++gem 'readline' # undeclared dependency of pry-remote
+ gem 'pry-rescue'
+ gem 'pry-stack_explorer'
+ gem 'pry-theme'
+--- a/Gemfile.lock	2026-11-24 05:38:30.063786042 +0100
++++ b/Gemfile.lock	2026-11-24 05:47:18.003332386 +0100
+@@ -649,6 +649,8 @@
+       prism (>= 1.6.0)
+       rbs (>= 4.0.0)
+       tsort
++    readline (0.0.4)
++      reline
+     redis (5.4.1)
+       redis-client (>= 0.22.0)
+     redis-client (0.30.1)
+@@ -982,6 +984,7 @@
+   rails (~> 8.1.0)
+   rake
+   rchardet (>= 1.8.0)
++  readline
+   redis (< 6)
+   rotp
+   rspec-rails

@@ -1,0 +1,17 @@
+--- a/lib/zammad/application/initializer/db_preflight_check.rb
++++ b/lib/zammad/application/initializer/db_preflight_check.rb
+@@ -50,8 +50,13 @@
+ 
+           #  formats: "9.5.0"
+           #           "10.3 (Debian 10.3-2)"
++          #           "19rc2" (prereleases omit the dot)
+           def current_version
+-            @current_version ||= pg_variable('server_version').split.first
++            @current_version ||= begin
++              version = pg_variable('server_version').split.first
++              # Gem::Version rejects "19rc2". "19.0rc2" compares correctly.
++              version.sub(/\A(\d+)(?=[A-Za-z])/, '\1.0')
++            end
+           end
+ 
+           def pg_variable(name)

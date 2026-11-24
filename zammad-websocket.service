@@ -1,0 +1,35 @@
+[Unit]
+Description=Zammad websocket server
+After=network.target zammad.service postgresql.service redis@zammad.service
+Requires=zammad.service
+PartOf=zammad.service
+
+[Service]
+Type=simple
+User=zammad
+Group=zammad
+WorkingDirectory=/srv/www/zammad
+EnvironmentFile=/etc/zammad/zammad.env
+ExecStart=/usr/bin/bundle exec script/websocket-server.rb -b ${ZAMMAD_BIND_IP} -p ${ZAMMAD_WEBSOCKET_PORT} start
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=180
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=zammad.service
