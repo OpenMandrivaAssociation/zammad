@@ -5,7 +5,7 @@
 Summary:	Helpdesk and customer support
 Name:		zammad
 Version:	7.2.3
-Release:	1
+Release:	2
 License:	AGPL-3.0-only
 Group:		Applications/Productivity
 URL:		https://zammad.org/
@@ -36,6 +36,12 @@ Source14:	zammad.apache.conf
 Source15:	zammad.bin
 Source16:	zammad.logrotate
 Source17:	zammad-httpd-wstunnel.conf
+# Optional local-model reply. Off until ai-reply.conf sets ENABLED=1.
+Source18:	zammad-ai-reply
+Source19:	zammad-ai-reply.conf
+Source20:	zammad-ai-reply.template
+Source21:	omv_ai_reply.rb
+Source22:	omv_ai_reply_job.rb
 # Ruby 4: Gemfile allowed range, plus readline for pry-remote.
 Patch0:		zammad-%{version}-ruby4.patch
 # PostgreSQL prereleases report server_version as "19rc2".
@@ -55,6 +61,7 @@ BuildRequires:	pkgconfig(libffi)
 
 Requires:	ruby >= 4.0.9
 Requires:	ruby < 4.1
+Requires:	/usr/bin/python
 Requires:	postgresql-server
 Requires:	redis
 Requires:	zammad-webserver-integration = %{EVRD}
@@ -69,6 +76,11 @@ Zammad is a web helpdesk for tickets, email, and chat.
 It is installed under /srv/www/zammad and uses PostgreSQL and a private
 Redis instance on this machine. Elasticsearch is optional and is not
 packaged. The setup wizard in the browser creates the administrator.
+
+A new customer message can be passed to a local model, which replies on
+the same channel when it is confident enough. That is off until
+/etc/zammad/ai-reply.conf sets ENABLED=1. The wording is
+/etc/zammad/ai-reply.template.
 
 See README.install.omv after installation.
 
@@ -218,7 +230,13 @@ install -d %{buildroot}%{_sysconfdir}/redis
 install -m 0644 %{SOURCE10} %{buildroot}%{_sysconfdir}/redis/zammad.conf
 install -d %{buildroot}%{_sysconfdir}/zammad
 install -m 0640 %{SOURCE5} %{buildroot}%{_sysconfdir}/zammad/database.yml
+install -m 0640 %{SOURCE19} %{buildroot}%{_sysconfdir}/zammad/ai-reply.conf
+install -m 0644 %{SOURCE20} %{buildroot}%{_sysconfdir}/zammad/ai-reply.template
 install -m 0644 %{SOURCE4} %{buildroot}%{_sysconfdir}/zammad/zammad.env
+install -d %{buildroot}%{_libexecdir}/zammad
+install -m 0755 %{SOURCE18} %{buildroot}%{_libexecdir}/zammad/ai-reply
+install -m 0644 %{SOURCE21} %{buildroot}/srv/www/%{name}/config/initializers/omv_ai_reply.rb
+install -m 0644 %{SOURCE22} %{buildroot}/srv/www/%{name}/app/jobs/omv_ai_reply_job.rb
 install -d %{buildroot}%{_sysconfdir}/logrotate.d
 install -m 0644 %{SOURCE16} %{buildroot}%{_sysconfdir}/logrotate.d/zammad
 install -d %{buildroot}%{_sysconfdir}/nginx/sites-available
@@ -246,8 +264,8 @@ install -d -o zammad -g zammad -m 0750 /var/lib/zammad/tmp/pids
 install -d -o zammad -g zammad -m 0750 /var/lib/zammad/tmp/sockets
 install -d -o zammad -g zammad -m 0750 /var/log/zammad
 install -d -o redis -g redis -m 0755 /srv/redis/zammad
-chgrp zammad %{_sysconfdir}/zammad/database.yml
-chmod 0640 %{_sysconfdir}/zammad/database.yml
+chgrp zammad %{_sysconfdir}/zammad/database.yml %{_sysconfdir}/zammad/ai-reply.conf
+chmod 0640 %{_sysconfdir}/zammad/database.yml %{_sysconfdir}/zammad/ai-reply.conf
 
 systemctl daemon-reload
 systemctl enable redis@zammad.service
@@ -315,7 +333,11 @@ fi
 %config(noreplace) %{_sysconfdir}/logrotate.d/zammad
 %dir %{_sysconfdir}/zammad
 %config(noreplace) %attr(0640,root,root) %verify(not group) %{_sysconfdir}/zammad/database.yml
+%config(noreplace) %attr(0640,root,root) %verify(not group) %{_sysconfdir}/zammad/ai-reply.conf
+%config(noreplace) %{_sysconfdir}/zammad/ai-reply.template
 %config(noreplace) %{_sysconfdir}/zammad/zammad.env
+%dir %{_libexecdir}/zammad
+%{_libexecdir}/zammad/ai-reply
 /srv/www/zammad
 
 %files nginx

@@ -1,0 +1,296 @@
+#!/usr/bin/python
+# Ask a model about one incoming Zammad message. Prints one JSON object:
+#   {"action": "skip", "reason": "...", "confidence": 0.0}
+#   {"action": "reply", "body": "...", "confidence": 0.8}
+# Exit 0 for skip or reply. Exit 1 when the model cannot be asked.
+# The caller must not send a reply on exit 1.
+#
+# Config and template paths can be overridden with ZAMMAD_AI_REPLY_CONF
+# and ZAMMAD_AI_REPLY_TEMPLATE. The packaged paths are the default.
+
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+CONF = os.environ.get("ZAMMAD_AI_REPLY_CONF", "/etc/zammad/ai-reply.conf")
+TEMPLATE = os.environ.get("ZAMMAD_AI_REPLY_TEMPLATE", "/etc/zammad/ai-reply.template")
+
+SYSTEM_PROMPT = """You help a support desk draft a first answer to one customer message.
+Reply with a JSON object and nothing else, in this shape:
+{"confidence": <number from 0 to 1>, "answer": "<short answer the customer can use>"}
+confidence is how likely that answer solves the problem without a human.
+Use a value below 0.1 when you are unsure, when the message is not a question, or when a correct answer would need account data, prices, or a promise you cannot verify.
+Do not invent those facts. The answer is plain text, with no greeting and no sign-off: the desk adds those from its own template.
+"""
+
+
+def load_conf(path):
+    cfg = {}
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            cfg[key.strip()] = value
+    return cfg
+
+
+def enabled(cfg):
+    return cfg.get("ENABLED", "0").lower() in ("1", "true", "yes", "on")
+
+
+def emit(payload):
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    sys.stdout.write("\n")
+
+
+def fail(message):
+    sys.stderr.write("zammad-ai-reply: %s\n" % message)
+    return 1
+
+
+def post_json(url, payload, api_key, timeout):
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method="POST")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    if api_key:
+        request.add_header("Authorization", "Bearer " + api_key)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError("HTTP %s from %s: %s" % (exc.code, url, detail)) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError("cannot reach %s: %s" % (url, exc.reason)) from exc
+
+
+def protocol_of(cfg, base):
+    forced = cfg.get("AI_PROTOCOL", "").strip().lower()
+    if forced:
+        return forced
+    host = urllib.parse.urlparse(base).hostname or ""
+    if base.endswith("/v1") and host == "api.x.ai":
+        return "xai"
+    if base.endswith("/v1"):
+        return "openai"
+    return "ollama"
+
+
+def message_text(data):
+    content = data
+    if isinstance(data, dict):
+        output_text = data.get("output_text")
+        if isinstance(output_text, str) and output_text.strip():
+            content = output_text
+        elif isinstance(data.get("output"), list):
+            parts = []
+            for item in data["output"]:
+                if not isinstance(item, dict):
+                    continue
+                piece = item.get("content")
+                if isinstance(piece, str):
+                    parts.append(piece)
+                elif isinstance(piece, list):
+                    for part in piece:
+                        if isinstance(part, dict):
+                            if part.get("type") in (None, "output_text", "text"):
+                                parts.append(part.get("text") or "")
+                        else:
+                            parts.append(str(part))
+            if not parts:
+                raise RuntimeError("model response had no text")
+            content = "".join(parts)
+        elif "choices" in data:
+            content = data["choices"][0]["message"]["content"]
+        elif "response" in data:
+            content = data["response"]
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(part.get("text") or "")
+            else:
+                parts.append(str(part))
+        content = "".join(parts)
+    if not isinstance(content, str):
+        raise RuntimeError("model response was not text")
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.endswith("```"):
+            text = text[: text.rfind("```")]
+        text = text.strip()
+    return text
+
+
+def ask_model(cfg, user_prompt):
+    base = cfg.get("AI_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+    model = cfg.get("AI_MODEL", "")
+    if not model:
+        raise RuntimeError("AI_MODEL is empty")
+    api_key = cfg.get("AI_API_KEY") or os.environ.get("XAI_API_KEY") or os.environ.get("AI_API_KEY") or ""
+    timeout = float(cfg.get("TIMEOUT") or 60)
+    protocol = protocol_of(cfg, base)
+    if protocol == "xai":
+        url = base + "/responses"
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "input": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+    elif protocol == "openai":
+        url = base + "/chat/completions"
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+    elif protocol == "ollama":
+        url = base + "/api/generate"
+        payload = {
+            "model": model,
+            "system": SYSTEM_PROMPT,
+            "prompt": user_prompt,
+            "stream": False,
+            "format": "json",
+        }
+    else:
+        raise RuntimeError("unknown AI_PROTOCOL %s" % protocol)
+    body = post_json(url, payload, api_key, timeout)
+    parsed = json.loads(message_text(body))
+    if not isinstance(parsed, dict):
+        raise RuntimeError("model JSON was not an object")
+    return parsed
+
+
+def confidence_of(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    if number > 1:
+        number = number / 100.0
+    if number < 0:
+        return 0.0
+    if number > 1:
+        return 1.0
+    return number
+
+
+def fill_template(template, incoming, answer):
+    customer = incoming.get("customer_name") or "there"
+    values = {
+        "ticket_number": str(incoming.get("ticket_number") or ""),
+        "customer_name": customer,
+        "subject": str(incoming.get("subject") or ""),
+        "response": answer,
+    }
+
+    def replace(match):
+        return values.get(match.group(1), match.group(0))
+
+    text = re.sub(
+        r"\{\{(ticket_number|customer_name|subject|response)\}\}",
+        replace,
+        template,
+    )
+    return text.strip()
+
+
+def main():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+        try:
+            cfg = load_conf(CONF)
+        except OSError as exc:
+            return fail("cannot read %s: %s" % (CONF, exc))
+        if not os.path.isfile(TEMPLATE):
+            return fail("missing " + TEMPLATE)
+        if enabled(cfg) and not cfg.get("AI_MODEL"):
+            return fail("ENABLED but AI_MODEL is empty")
+        emit({"action": "skip", "reason": "check ok", "enabled": enabled(cfg)})
+        return 0
+
+    try:
+        incoming = json.load(sys.stdin)
+    except json.JSONDecodeError as exc:
+        return fail("stdin is not JSON: %s" % exc)
+
+    try:
+        cfg = load_conf(CONF)
+    except OSError as exc:
+        return fail("cannot read %s: %s" % (CONF, exc))
+    if not enabled(cfg):
+        emit({"action": "skip", "reason": "disabled"})
+        return 0
+
+    minimum = confidence_of(cfg.get("CONFIDENCE_MIN", "0.10"))
+    if minimum is None:
+        minimum = 0.10
+
+    user_prompt = "Subject: %s\nChannel: %s\n\n%s" % (
+        incoming.get("subject") or "",
+        incoming.get("channel") or "",
+        incoming.get("body") or "",
+    )
+    try:
+        result = ask_model(cfg, user_prompt)
+    except Exception as exc:
+        return fail(str(exc))
+
+    confidence = confidence_of(result.get("confidence"))
+    answer = result.get("answer") or result.get("response") or ""
+    if not isinstance(answer, str):
+        answer = str(answer)
+    answer = answer.strip()
+    if confidence is None:
+        emit({"action": "skip", "reason": "model did not return a confidence"})
+        return 0
+    if confidence < minimum:
+        emit({
+            "action": "skip",
+            "reason": "confidence %.3f is below %.3f" % (confidence, minimum),
+            "confidence": confidence,
+        })
+        return 0
+    if not answer:
+        emit({"action": "skip", "reason": "empty answer", "confidence": confidence})
+        return 0
+
+    try:
+        with open(TEMPLATE, encoding="utf-8") as handle:
+            template = handle.read()
+    except OSError as exc:
+        return fail("cannot read template: %s" % exc)
+
+    emit({
+        "action": "reply",
+        "body": fill_template(template, incoming, answer),
+        "confidence": confidence,
+    })
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

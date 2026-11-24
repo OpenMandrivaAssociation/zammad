@@ -46,6 +46,32 @@ and run:
 2. Open the site and finish the setup wizard (administrator, organisation,
    email). The wizard is the initial login. There is no default password.
 
+3. Optional AI reply. This is off. When it is on, a new customer
+   message is sent to a local model. If the model reports a confidence
+   of at least 10 percent, Zammad replies on the same channel with the
+   text in /etc/zammad/ai-reply.template. A lower confidence sends
+   nothing. Phone, chat, fax, and X messages are skipped. A web form
+   message is answered by email when the customer and the group both
+   have an email address.
+
+   Edit /etc/zammad/ai-reply.conf. Set ENABLED=1 and AI_MODEL. The
+   default server is Ollama at http://127.0.0.1:11434, and the model
+   has to be pulled already. The next message uses the saved file.
+   Restarting Zammad is not required.
+
+   Placeholders in the template: {{response}} {{ticket_number}}
+   {{customer_name}} {{subject}}.
+
+   A URL ending in /v1 is treated as OpenAI chat completions. For
+   hosted SpaceXAI, set AI_BASE_URL=https://api.x.ai/v1 and
+   AI_MODEL=grok-4.7, and put the key in AI_API_KEY in the same file.
+   That file is readable by root and the zammad group. Do not put the
+   key in zammad.env, which is world-readable. An empty AI_API_KEY
+   falls back to XAI_API_KEY or AI_API_KEY in the worker environment.
+
+   Zammad's SMS driver sends the first 160 characters only. A long
+   template is cut off on SMS. The ticket still stores the full reply.
+
 Elasticsearch is optional. Zammad searches in PostgreSQL without it.
 Elasticsearch is not packaged in OpenMandriva.
 
