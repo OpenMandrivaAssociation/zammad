@@ -1,4 +1,4 @@
 sources:
-  zammad-7.2.3.tar.gz: ffa798e3a2cf2f5a3dd3851e3b5df6d79aa98916
-  zammad-7.2.3-gems.tar.xz: d79010300c8cbeea153c79cb4f1e366955b07d25
-  zammad-7.2.3-assets.tar.xz: 66b060206a937335af083c5fe9f687afc6cf0626
+  zammad-7.3.0.tar.gz: 61da198a4f150f267a97312be3b29ef1badb9abf
+  zammad-7.3.0-gems.tar.xz: 8e29305198d408f439619334988b1273a93c3518
+  zammad-7.3.0-assets.tar.xz: a7f46c2c2bcaee8803a1f88dd03da16477a54827

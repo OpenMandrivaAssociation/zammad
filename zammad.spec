@@ -4,8 +4,8 @@
 
 Summary:	Helpdesk and customer support
 Name:		zammad
-Version:	7.2.3
-Release:	2
+Version:	7.3.0
+Release:	1
 License:	AGPL-3.0-only
 Group:		Applications/Productivity
 URL:		https://zammad.org/
@@ -124,7 +124,7 @@ tar -xf %{SOURCE2}
 export HOME=%{_builddir}/zammad-bundle-home
 export BUNDLE_USER_HOME="$HOME"
 mkdir -p "$HOME"
-# Upstream locks Ruby 3.4.12 and Bundler 2.6.9. Rewrite both before
+# Upstream locks Ruby 3.4.13 and Bundler 2.6.9. Rewrite both before
 # Bundler runs, or it tries to download that Bundler.
 ruby -rbundler << 'RUBY'
 lock = File.read("Gemfile.lock")
